@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Método de Jacobi - Resolución de Sistemas Lineales</title>
+  <meta name="description" content="Aplicación web interactiva para resolver sistemas de ecuaciones lineales mediante el método iterativo de Jacobi, verificación de dominancia diagonal y tabla de iteraciones.">
+  
+  <!-- KaTeX para renderizado matemático -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+  <!-- Estilos propios -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-title">
+        <h1>Método Iterativo de Jacobi</h1>
+      </div>
+      <div class="header-controls">
+        <div class="form-group">
+          <label for="selectDecimales">Decimales:</label>
+          <select id="selectDecimales" class="form-select">
+            <option value="4">4 decimales</option>
+            <option value="6" selected>6 decimales</option>
+            <option value="8">8 decimales</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- Card 1: Entrada del Sistema -->
+    <section class="card" id="seccionEntrada">
+      <div class="card-title">
+        <span>Definición del Sistema de Ecuaciones</span>
+        <button id="btnCargarPreset" class="btn btn-secondary" title="Carga el problema 4x4 exacto del documento plan.md">
+          Cargar ejercicio 4x4
+        </button>
+      </div>
+
+      <!-- Barra de configuración de dimensión y parámetros -->
+      <div class="config-bar">
+        <div class="form-group">
+          <label for="selectDimension">Dimensión <i>N</i>:</label>
+          <select id="selectDimension" class="form-select">
+            <option value="2">2 × 2</option>
+            <option value="3">3 × 3</option>
+            <option value="4" selected>4 × 4</option>
+            <option value="5">5 × 5</option>
+            <option value="6">6 × 6</option>
+            <option value="7">7 × 7</option>
+            <option value="8">8 × 8</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="inputTolerancia">Tolerancia (&epsilon;):</label>
+          <input type="text" id="inputTolerancia" class="form-input number-input" value="0.0001" placeholder="1e-4">
+        </div>
+
+        <div class="form-group">
+          <label for="inputMaxIter">Máx. Iteraciones:</label>
+          <input type="number" id="inputMaxIter" class="form-input number-input" value="1000" min="1" max="10000">
+        </div>
+      </div>
+
+      <!-- Cuadrícula de ecuaciones A y b -->
+      <div class="matrix-container" id="contenedorEcuaciones">
+        <!-- Generado dinámicamente por app.js -->
+      </div>
+
+      <!-- Vector Inicial x^(0) -->
+      <div class="x0-container">
+        <strong style="font-size: 12px; color: var(--text-secondary);">Vector inicial <b>x</b><sup>(0)</sup>:</strong>
+        <div id="contenedorX0" style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- Barra de acciones -->
+      <div class="action-bar">
+        <button id="btnResolver" class="btn btn-primary">
+          Resolver Sistema (Jacobi)
+        </button>
+      </div>
+    </section>
+
+    <!-- Card 2: Análisis de Dominancia Diagonal -->
+    <section class="card hidden" id="seccionAnalisis">
+      <div class="card-title">
+        <span>Análisis Preliminar: Dominancia Diagonal Estricta (EDD)</span>
+      </div>
+      <div id="bannerDominancia" class="banner"></div>
+
+      <div class="data-table-container">
+        <table class="data-table" id="tablaDominancia">
+          <thead>
+            <tr>
+              <th class="center">Fila <i>i</i></th>
+              <th>Elemento Diagonal |<i>a<sub>ii</sub></i>|</th>
+              <th>Suma fuera de diagonal &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>|</th>
+              <th class="center">Condición |<i>a<sub>ii</sub></i>| &gt; &Sigma; |<i>a<sub>ij</sub></i>|</th>
+              <th class="center">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoTablaDominancia">
+            <!-- Filas dinámicas -->
+          </tbody>
+        </table>
+      </div>
+
+      <p id="justificacionDominancia" style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);"></p>
+    </section>
+
+    <!-- Card 3: Ecuaciones Despejadas -->
+    <section class="card hidden" id="seccionDespejes">
+      <div class="card-title">
+        <span>Fórmulas Iterativas Despejadas (Jacobi)</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+        En Jacobi, cada componente <i>x<sub>i</sub></i><sup>(<i>k</i>+1)</sup> se calcula exclusivamente a partir del vector de la iteración previa <b>x</b><sup>(<i>k</i>)</sup>:
+      </p>
+      <div id="contenedorLatexDespejes" class="math-block">
+        <!-- Renderizado KaTeX -->
+      </div>
+    </section>
+
+    <!-- Card 4: Resultados y Tabla de Iteraciones -->
+    <section class="card hidden" id="seccionResultados">
+      <div class="card-title">
+        <span>Resultados del Método de Jacobi</span>
+      </div>
+
+      <!-- Métricas Resumen -->
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="summary-label">Estado</div>
+          <div class="summary-value" id="resEstado">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Iteraciones</div>
+          <div class="summary-value" id="resIteraciones">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Error Relativo Final</div>
+          <div class="summary-value" id="resErrorFinal">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Norma del Residuo ||r||<sub>&infin;</sub></div>
+          <div class="summary-value" id="resNormaResiduo">—</div>
+        </div>
+      </div>
+
+      <!-- Vector Solución y Residuo en LaTeX -->
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;">
+        <div style="flex: 1; min-width: 280px;">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+            Solución aproximada <b>x</b>*:
+          </div>
+          <div id="latexSolucion" class="math-block" style="margin-bottom: 0;"></div>
+        </div>
+        <div style="flex: 1; min-width: 280px;">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+            Vector Residuo <b>r</b> = <b>b</b> - <i>A</i><b>x</b>*:
+          </div>
+          <div id="latexResiduo" class="math-block" style="margin-bottom: 0;"></div>
+        </div>
+      </div>
+
+      <!-- Tabla de Iteraciones -->
+      <div class="card-title" style="margin-top: 14px; font-size: 13px;">
+        <span>Historial Completo de Iteraciones</span>
+        <span id="cantIteracionesBadge" style="font-size: 12px; color: var(--text-muted); font-weight: normal;"></span>
+      </div>
+      <div class="data-table-container">
+        <table class="data-table" id="tablaHistorial">
+          <thead id="cabeceraTablaHistorial">
+            <!-- Columnas generadas dinámicamente según N -->
+          </thead>
+          <tbody id="cuerpoTablaHistorial">
+            <!-- Filas con valores de k y x_i -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Scripts modulares -->
+  <script src="js/datos.js"></script>
+  <script src="js/validaciones.js"></script>
+  <script src="js/jacobi.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

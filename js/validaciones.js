@@ -74,11 +74,95 @@ function verificarDominanciaDiagonal(A) {
   };
 }
 
+/**
+ * Verifica el Criterio de Convergencia de Sassenfeld para el método de Gauss-Seidel.
+ * 
+ * Para la primera fila (i = 0):
+ *   beta_0 = ( sum_{j=1}^{n-1} |a_{0,j}| ) / |a_{0,0}|
+ * 
+ * Para las filas siguientes (i > 0):
+ *   beta_i = ( sum_{j=0}^{i-1} |a_{i,j}| * beta_j + sum_{j=i+1}^{n-1} |a_{i,j}| ) / |a_{i,i}|
+ * 
+ * Condición de Sassenfeld:
+ *   beta = max_i(beta_i) < 1 garantiza la convergencia de Gauss-Seidel.
+ * 
+ * @param {number[][]} A Matriz cuadrada
+ * @returns {{
+ *   cumple: boolean,
+ *   betaMax: number,
+ *   detalles: Array<{fila: number, beta: number, formulaTexto: string, cumpleFila: boolean}>
+ * }}
+ */
+function verificarCriterioSassenfeld(A) {
+  const n = A.length;
+  const betas = [];
+  const detalles = [];
+  let cumple = true;
+
+  for (let i = 0; i < n; i++) {
+    const diag = Math.abs(A[i][i]);
+    if (diag === 0) {
+      return {
+        cumple: false,
+        betaMax: Infinity,
+        detalles: [{ fila: i + 1, beta: Infinity, formulaTexto: 'División entre cero (diagonal nula)', cumpleFila: false }]
+      };
+    }
+
+    let sumaAnteriores = 0;
+    let sumaPosteriores = 0;
+    const terminosTexto = [];
+
+    // Términos previos ponderados por beta_j
+    for (let j = 0; j < i; j++) {
+      const coef = Math.abs(A[i][j]);
+      sumaAnteriores += coef * betas[j];
+      terminosTexto.push(`|${A[i][j]}|(${betas[j].toFixed(4)})`);
+    }
+
+    // Términos posteriores no ponderados
+    for (let j = i + 1; j < n; j++) {
+      const coef = Math.abs(A[i][j]);
+      sumaPosteriores += coef;
+      terminosTexto.push(`|${A[i][j]}|`);
+    }
+
+    const numerador = sumaAnteriores + sumaPosteriores;
+    const beta_i = numerador / diag;
+    betas.push(beta_i);
+
+    const cumpleFila = beta_i < 1;
+    if (!cumpleFila) {
+      cumple = false;
+    }
+
+    const formulaTexto = `(${terminosTexto.join(' + ') || '0'}) / |${A[i][i]}|`;
+
+    detalles.push({
+      fila: i + 1,
+      beta: beta_i,
+      formulaTexto,
+      cumpleFila
+    });
+  }
+
+  const betaMax = Math.max(...betas);
+  const betaMaxRounded = Math.round(betaMax * 1e10) / 1e10;
+  cumple = betaMaxRounded < 1;
+
+  return {
+    cumple,
+    betaMax,
+    detalles
+  };
+}
+
 // Exportar para entorno Node.js si aplica (para tests)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     esMatrizCuadrada,
     validarDiagonalNoNula,
-    verificarDominanciaDiagonal
+    verificarDominanciaDiagonal,
+    verificarCriterioSassenfeld
   };
 }

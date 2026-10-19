@@ -133,10 +133,10 @@ function ocultarSeccionesResultados() {
 }
 
 // ==========================================================================
-// Generación de despejes algebraicos de Jacobi en LaTeX
+// Generación de despejes algebraicos (Jacobi y Gauss-Seidel) en LaTeX
 // ==========================================================================
 
-function generarLatexDespejes(A, b) {
+function generarLatexDespejesJacobi(A, b) {
   const n = A.length;
   let latex = '\\begin{aligned}\n';
 
@@ -152,6 +152,35 @@ function generarLatexDespejes(A, b) {
           const coefAbs = Math.abs(coef);
           const factor = coefAbs === 1 ? '' : `${coefAbs}`;
           numerador += ` ${signo} ${factor} x_{${j + 1}}^{(k)}`;
+        }
+      }
+    }
+
+    latex += `x_{${i + 1}}^{(k+1)} &= \\frac{${numerador}}{${diag}} \\\\[6pt]\n`;
+  }
+
+  latex += '\\end{aligned}';
+  return latex;
+}
+
+function generarLatexDespejesGaussSeidel(A, b) {
+  const n = A.length;
+  let latex = '\\begin{aligned}\n';
+
+  for (let i = 0; i < n; i++) {
+    const diag = A[i][i];
+    let numerador = `${b[i]}`;
+
+    for (let j = 0; j < n; j++) {
+      if (i !== j) {
+        const coef = A[i][j];
+        if (coef !== 0) {
+          const signo = coef > 0 ? '-' : '+';
+          const coefAbs = Math.abs(coef);
+          const factor = coefAbs === 1 ? '' : `${coefAbs}`;
+          // Si j < i se usa el valor recién calculado (k+1), si j > i se usa el previo (k)
+          const superIndice = j < i ? '(k+1)' : '(k)';
+          numerador += ` ${signo} ${factor} x_{${j + 1}}^{${superIndice}}`;
         }
       }
     }
@@ -250,11 +279,12 @@ function renderizarResumen(resultado, n) {
 }
 
 // ==========================================================================
-// Flujo Principal de Resolución (Jacobi)
+// Flujo Principal de Resolución (Jacobi o Gauss-Seidel)
 // ==========================================================================
 
 function resolverSistema() {
   const n = parseInt(document.getElementById('selectDimension').value, 10);
+  const metodo = document.getElementById('selectMetodo').value;
   const datos = leerDatosDesdeDOM(n);
 
   if (!datos.esValido) {
@@ -270,8 +300,13 @@ function resolverSistema() {
   const diagCheck = validarDiagonalNoNula(A);
   const seccionAnalisis = document.getElementById('seccionAnalisis');
   const bannerDominancia = document.getElementById('bannerDominancia');
+  const cabeceraTablaDominancia = document.getElementById('cabeceraTablaDominancia');
   const cuerpoTablaDominancia = document.getElementById('cuerpoTablaDominancia');
   const justificacion = document.getElementById('justificacionDominancia');
+  const tituloAnalisis = document.getElementById('tituloAnalisis');
+  const tituloDespejes = document.getElementById('tituloDespejes');
+  const descDespejes = document.getElementById('descDespejes');
+  const tituloResultados = document.getElementById('tituloResultados');
 
   seccionAnalisis.classList.remove('hidden');
 
@@ -279,8 +314,9 @@ function resolverSistema() {
     bannerDominancia.className = 'banner banner-danger';
     bannerDominancia.innerHTML = `
       <strong>Bloqueo Estricto:</strong> El elemento diagonal en la fila ${diagCheck.filaInvalida} es cero (<i>a</i><sub>${diagCheck.filaInvalida},${diagCheck.filaInvalida}</sub> = 0).
-      En el método de Jacobi se divide obligatoriamente por <i>a<sub>ii</sub></i> para despejar <i>x<sub>i</sub></i>. No es posible ejecutar el método.
+      En métodos iterativos con división por <i>a<sub>ii</sub></i> no es posible despejar <i>x<sub>i</sub></i>. No se puede ejecutar el método.
     `;
+    cabeceraTablaDominancia.innerHTML = '';
     cuerpoTablaDominancia.innerHTML = '';
     justificacion.textContent = 'La presencia de ceros en la diagonal principal impide el despeje de incógnitas.';
     document.getElementById('seccionDespejes').classList.add('hidden');
@@ -288,55 +324,144 @@ function resolverSistema() {
     return;
   }
 
-  // 2. Verificar dominancia diagonal estricta
-  const edd = verificarDominanciaDiagonal(A);
+  let esValidoParaCalcular = false;
+  let latexDespejes = '';
 
-  let tbodyDom = '';
-  edd.detalles.forEach(d => {
-    const estadoBadge = d.cumple 
-      ? '<span class="badge badge-success">Cumple</span>' 
-      : '<span class="badge badge-danger">Falla</span>';
-    tbodyDom += `
+  // ==========================================================================
+  // Flujo Específico según el Método Elegido
+  // ==========================================================================
+  if (metodo === 'gauss-seidel') {
+    tituloAnalisis.textContent = 'Análisis Preliminar: Criterio de Convergencia de Sassenfeld';
+    tituloDespejes.textContent = 'Fórmulas Iterativas Despejadas (Gauss-Seidel)';
+    descDespejes.innerHTML = 'En Gauss-Seidel, las incógnitas <i>x<sub>j</sub></i><sup>(<i>k</i>+1)</sup> con <i>j</i> &lt; <i>i</i> ya calculadas en la iteración actual se sustituyen de inmediato en las siguientes ecuaciones:';
+    tituloResultados.textContent = 'Resultados del Método de Gauss-Seidel';
+
+    // Cabecera Sassenfeld
+    cabeceraTablaDominancia.innerHTML = `
       <tr>
-        <td class="center">Fila ${d.fila}</td>
-        <td>|<i>a</i><sub>${d.fila},${d.fila}</sub>| = ${d.diagonal}</td>
-        <td>${d.sumaFueraDiagonal}</td>
-        <td class="center">${d.diagonal} &gt; ${d.sumaFueraDiagonal}</td>
-        <td class="center">${estadoBadge}</td>
+        <th class="center">Fila <i>i</i></th>
+        <th>Desglose de &beta;<sub><i>i</i></sub></th>
+        <th>Valor &beta;<sub><i>i</i></sub></th>
+        <th class="center">Condición &beta;<sub><i>i</i></sub> &lt; 1</th>
+        <th class="center">Estado</th>
       </tr>
     `;
-  });
-  cuerpoTablaDominancia.innerHTML = tbodyDom;
 
-  // 3. Regla de negocio acordada en grill-me: Bloqueo estricto si no es EDD
-  if (!edd.esDominante) {
-    bannerDominancia.className = 'banner banner-danger';
+    const sassenfeld = verificarCriterioSassenfeld(A);
+
+    let tbodyHtml = '';
+    sassenfeld.detalles.forEach(d => {
+      const badge = d.cumpleFila 
+        ? '<span class="badge badge-success">Cumple</span>' 
+        : '<span class="badge badge-danger">Falla</span>';
+      tbodyHtml += `
+        <tr>
+          <td class="center">Fila ${d.fila}</td>
+          <td style="font-family: monospace; font-size: 11.5px;">&beta;<sub>${d.fila}</sub> = ${d.formulaTexto}</td>
+          <td>${formatearNumero(d.beta, 4)}</td>
+          <td class="center">${formatearNumero(d.beta, 4)} &lt; 1</td>
+          <td class="center">${badge}</td>
+        </tr>
+      `;
+    });
+    cuerpoTablaDominancia.innerHTML = tbodyHtml;
+
+    if (!sassenfeld.cumple) {
+      bannerDominancia.className = 'banner banner-danger';
+      bannerDominancia.innerHTML = `
+        <strong>Bloqueo Estricto Activado:</strong> La matriz ingresada NO satisface el criterio de Sassenfeld (&beta; = ${sassenfeld.betaMax.toFixed(4)} &ge; 1).
+        Se detiene la ejecución para asegurar estabilidad matemática.
+      `;
+      justificacion.innerHTML = `Al ser &beta; = max(&beta;<sub>i</sub>) = ${sassenfeld.betaMax.toFixed(4)} &ge; 1, no se garantiza que la matriz de iteración de Gauss-Seidel sea contractiva ni que el método converja.`;
+      document.getElementById('seccionDespejes').classList.add('hidden');
+      document.getElementById('seccionResultados').classList.add('hidden');
+      return;
+    }
+
+    // Sassenfeld Aprobado
+    bannerDominancia.className = 'banner banner-success';
     bannerDominancia.innerHTML = `
-      <strong>Bloqueo Estricto Activado:</strong> La matriz ingresada NO es estrictamente diagonal dominante por filas.
-      Se detiene la ejecución del método de Jacobi para asegurar la garantía de convergencia teórica exigida por el curso.
+      <strong>Criterio de Sassenfeld Cumplido:</strong> El coeficiente de Sassenfeld es &beta; = max(&beta;<sub><i>i</i></sub>) = ${sassenfeld.betaMax.toFixed(4)} &lt; 1.
+      Esta condición suficiente garantiza teóricamente la convergencia del método de Gauss-Seidel.
     `;
-    justificacion.innerHTML = 'Al no cumplirse la condición |<i>a<sub>ii</sub></i>| &gt; &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>| en una o más filas, la matriz no es estrictamente diagonal dominante y no se garantiza que el radio espectral de la matriz de iteración cumpla &rho;(<i>T<sub>J</sub></i>) &lt; 1.';
-    document.getElementById('seccionDespejes').classList.add('hidden');
-    document.getElementById('seccionResultados').classList.add('hidden');
-    return;
+    justificacion.innerHTML = `Dado que &beta; = ${sassenfeld.betaMax.toFixed(4)} &lt; 1, la norma de la matriz de iteración satisface ||<i>T<sub>GS</sub></i>||<sub>&infin;</sub> &le; &beta; &lt; 1, asegurando convergencia geométrica para cualquier vector inicial <b>x</b><sup>(0)</sup>.`;
+
+    latexDespejes = generarLatexDespejesGaussSeidel(A, b);
+    esValidoParaCalcular = true;
+
+  } else {
+    // Método Jacobi (EDD)
+    tituloAnalisis.textContent = 'Análisis Preliminar: Dominancia Diagonal Estricta (EDD)';
+    tituloDespejes.textContent = 'Fórmulas Iterativas Despejadas (Jacobi)';
+    descDespejes.innerHTML = 'En Jacobi, cada componente <i>x<sub>i</sub></i><sup>(<i>k</i>+1)</sup> se calcula exclusivamente a partir del vector de la iteración previa <b>x</b><sup>(<i>k</i>)</sup>:';
+    tituloResultados.textContent = 'Resultados del Método de Jacobi';
+
+    // Cabecera EDD
+    cabeceraTablaDominancia.innerHTML = `
+      <tr>
+        <th class="center">Fila <i>i</i></th>
+        <th>Elemento Diagonal |<i>a<sub>ii</sub></i>|</th>
+        <th>Suma fuera de diagonal &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>|</th>
+        <th class="center">Condición |<i>a<sub>ii</sub></i>| &gt; &Sigma; |<i>a<sub>ij</sub></i>|</th>
+        <th class="center">Estado</th>
+      </tr>
+    `;
+
+    const edd = verificarDominanciaDiagonal(A);
+
+    let tbodyDom = '';
+    edd.detalles.forEach(d => {
+      const estadoBadge = d.cumple 
+        ? '<span class="badge badge-success">Cumple</span>' 
+        : '<span class="badge badge-danger">Falla</span>';
+      tbodyDom += `
+        <tr>
+          <td class="center">Fila ${d.fila}</td>
+          <td>|<i>a</i><sub>${d.fila},${d.fila}</sub>| = ${d.diagonal}</td>
+          <td>${d.sumaFueraDiagonal}</td>
+          <td class="center">${d.diagonal} &gt; ${d.sumaFueraDiagonal}</td>
+          <td class="center">${estadoBadge}</td>
+        </tr>
+      `;
+    });
+    cuerpoTablaDominancia.innerHTML = tbodyDom;
+
+    if (!edd.esDominante) {
+      bannerDominancia.className = 'banner banner-danger';
+      bannerDominancia.innerHTML = `
+        <strong>Bloqueo Estricto Activado:</strong> La matriz ingresada NO es estrictamente diagonal dominante por filas.
+        Se detiene la ejecución del método de Jacobi para asegurar la garantía de convergencia teórica exigida por el curso.
+      `;
+      justificacion.innerHTML = 'Al no cumplirse la condición |<i>a<sub>ii</sub></i>| &gt; &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>| en una o más filas, la matriz no es estrictamente diagonal dominante y no se garantiza que el radio espectral cumpla &rho;(<i>T<sub>J</sub></i>) &lt; 1.';
+      document.getElementById('seccionDespejes').classList.add('hidden');
+      document.getElementById('seccionResultados').classList.add('hidden');
+      return;
+    }
+
+    // Jacobi Aprobado
+    bannerDominancia.className = 'banner banner-success';
+    bannerDominancia.innerHTML = `
+      <strong>Matriz Estrictamente Diagonal Dominante (EDD):</strong> Todas las filas cumplen la condición de dominancia diagonal estricta.
+      Esta condición suficiente garantiza teóricamente la convergencia única del método de Jacobi hacia la solución del sistema.
+    `;
+    justificacion.innerHTML = 'Dado que la matriz es estrictamente diagonal dominante por filas (|<i>a<sub>ii</sub></i>| &gt; &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>|), el radio espectral de la matriz de iteración <i>T<sub>J</sub></i> = <i>D</i><sup>&minus;1</sup>(<i>L</i> + <i>U</i>) cumple &rho;(<i>T<sub>J</sub></i>) &lt; 1, garantizando teóricamente la convergencia para cualquier vector inicial <b>x</b><sup>(0)</sup>.';
+
+    latexDespejes = generarLatexDespejesJacobi(A, b);
+    esValidoParaCalcular = true;
   }
 
-  // Si es EDD: Aprobado para ejecución
-  bannerDominancia.className = 'banner banner-success';
-  bannerDominancia.innerHTML = `
-    <strong>Matriz Estrictamente Diagonal Dominante (EDD):</strong> Todas las filas cumplen la condición de dominancia diagonal estricta.
-    Esta condición suficiente garantiza teóricamente la convergencia única del método de Jacobi hacia la solución del sistema.
-  `;
-  justificacion.innerHTML = 'Dado que la matriz es estrictamente diagonal dominante por filas (|<i>a<sub>ii</sub></i>| &gt; &Sigma;<sub><i>j</i> &ne; <i>i</i></sub> |<i>a<sub>ij</sub></i>|), el radio espectral de la matriz de iteración <i>T<sub>J</sub></i> = <i>D</i><sup>&minus;1</sup>(<i>L</i> + <i>U</i>) cumple &rho;(<i>T<sub>J</sub></i>) &lt; 1, garantizando teóricamente la convergencia para cualquier vector inicial <b>x</b><sup>(0)</sup>.';
+  if (!esValidoParaCalcular) return;
 
   // 4. Renderizar Despejes KaTeX
   const seccionDespejes = document.getElementById('seccionDespejes');
   seccionDespejes.classList.remove('hidden');
-  const latexDespejes = generarLatexDespejes(A, b);
   renderizarKaTeX(latexDespejes, 'contenedorLatexDespejes');
 
-  // 5. Ejecutar Algoritmo de Jacobi
-  const resultado = ejecutarJacobi(A, b, x0, tolerancia, maxIteraciones);
+  // 5. Ejecutar Algoritmo Seleccionado
+  const resultado = metodo === 'gauss-seidel'
+    ? ejecutarGaussSeidel(A, b, x0, tolerancia, maxIteraciones)
+    : ejecutarJacobi(A, b, x0, tolerancia, maxIteraciones);
+
   estado.ultimoResultado = resultado;
 
   // 6. Mostrar Resultados y Tabla
@@ -356,12 +481,20 @@ function resolverSistema() {
 
 document.addEventListener('DOMContentLoaded', () => {
   const selectDim = document.getElementById('selectDimension');
+  const selectMet = document.getElementById('selectMetodo');
   const btnPreset = document.getElementById('btnCargarPreset');
   const btnResolver = document.getElementById('btnResolver');
   const selectDec = document.getElementById('selectDecimales');
 
   // Cargar preset 4x4 por defecto al iniciar
   renderizarCuadricula(PRESET_EJERCICIO_4X4.n, PRESET_EJERCICIO_4X4);
+
+  // Cambio de método (oculta resultados previos para forzar nuevo cálculo limpio)
+  if (selectMet) {
+    selectMet.addEventListener('change', () => {
+      ocultarSeccionesResultados();
+    });
+  }
 
   // Cambio de dimensión N
   selectDim.addEventListener('change', (e) => {

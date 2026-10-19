@@ -172,12 +172,22 @@ function renderizarTablaHistorial(historial, n) {
   const cuerpo = document.getElementById('cuerpoTablaHistorial');
   if (!cabecera || !cuerpo) return;
 
-  // Cabecera dinámica
-  let thHtml = '<tr><th class="center" style="width: 60px;">Iteración (k)</th>';
+  // Cabecera dinámica agrupada:
+  // k | x_1 ... x_n | e(x_1) ... e(x_n) | Error Máximo (E)
+  let thHtml = '<tr><th class="center" style="width: 50px;">k</th>';
+  
+  // Columnas de variables
   for (let j = 0; j < n; j++) {
     thHtml += `<th>x<sub>${j + 1}</sub></th>`;
   }
-  thHtml += '<th>Error Relativo ||&Delta;x||<sub>&infin;</sub> / ||x||<sub>&infin;</sub></th></tr>';
+  
+  // Columnas de errores relativos individuales
+  for (let j = 0; j < n; j++) {
+    thHtml += `<th>e(x<sub>${j + 1}</sub>)</th>`;
+  }
+  
+  // Columna de error máximo
+  thHtml += '<th>Error Máximo (E)</th></tr>';
   cabecera.innerHTML = thHtml;
 
   // Filas del historial
@@ -189,10 +199,18 @@ function renderizarTablaHistorial(historial, n) {
     tbodyHtml += `<tr class="${claseTr}">`;
     tbodyHtml += `<td class="center"><strong>${item.iteracion}</strong></td>`;
     
+    // Valores de variables
     for (let j = 0; j < n; j++) {
       tbodyHtml += `<td>${formatearNumero(item.x[j])}</td>`;
     }
 
+    // Errores relativos individuales
+    for (let j = 0; j < n; j++) {
+      const errVal = item.errores ? item.errores[j] : null;
+      tbodyHtml += `<td>${formatearError(errVal)}</td>`;
+    }
+
+    // Error máximo global
     tbodyHtml += `<td>${formatearError(item.error)}</td>`;
     tbodyHtml += '</tr>';
   });

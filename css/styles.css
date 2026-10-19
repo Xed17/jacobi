@@ -259,6 +259,7 @@ table.data-table {
 table.data-table th, table.data-table td {
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 table.data-table th {

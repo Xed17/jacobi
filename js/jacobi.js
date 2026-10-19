@@ -25,25 +25,33 @@ function normaInfinito(vector) {
 }
 
 /**
- * Calcula el error relativo utilizando la norma infinito vectorial:
- * E^(k+1) = ||x^(k+1) - x^(k)||_inf / ||x^(k+1)||_inf
- * Con protección si ||x^(k+1)||_inf es 0 o cercano a cero.
+ * Calcula el error relativo individual de cada componente:
+ * e_i^(k+1) = |x_i^(k+1) - x_i^(k)| / |x_i^(k+1)|
+ * Con protección si |x_i^(k+1)| es 0 o cercano a cero (< 1e-14).
+ * También calcula el error máximo E = max_i(e_i) como criterio global de parada.
  * 
  * @param {number[]} xNuevo Vector en la iteración k+1
  * @param {number[]} xAnterior Vector en la iteración k
- * @returns {number}
+ * @returns {{errores: number[], errorMaximo: number}}
+ */
+function calcularErroresRelativos(xNuevo, xAnterior) {
+  const errores = [];
+  for (let i = 0; i < xNuevo.length; i++) {
+    const diff = Math.abs(xNuevo[i] - xAnterior[i]);
+    const denom = Math.abs(xNuevo[i]);
+    const err = (denom === 0 || denom < 1e-14) ? diff : diff / denom;
+    errores.push(err);
+  }
+  const errorMaximo = Math.max(...errores);
+  return { errores, errorMaximo };
+}
+
+/**
+ * Mantiene compatibilidad con norma vectorial infinito.
  */
 function calcularErrorRelativoVectorial(xNuevo, xAnterior) {
-  const diferencias = xNuevo.map((val, i) => Math.abs(val - xAnterior[i]));
-  const normaDiff = Math.max(...diferencias);
-  const normaNuevo = normaInfinito(xNuevo);
-
-  // Protección contra división por cero
-  if (normaNuevo === 0 || Math.abs(normaNuevo) < 1e-14) {
-    return normaDiff;
-  }
-
-  return normaDiff / normaNuevo;
+  const { errorMaximo } = calcularErroresRelativos(xNuevo, xAnterior);
+  return errorMaximo;
 }
 
 /**
@@ -62,7 +70,7 @@ function calcularResiduo(A, b, x) {
 
 /**
  * Ejecuta el método de Jacobi.
- * Criterio de parada: error < tolerancia o k >= maxIteraciones.
+ * Criterio de parada: errorMaximo < tolerancia o k >= maxIteraciones.
  * 
  * @param {number[][]} A Matriz de coeficientes n x n
  * @param {number[]} b Vector de términos independientes
@@ -76,7 +84,7 @@ function calcularResiduo(A, b, x) {
  *   errorFinal: number,
  *   residuo: number[],
  *   normaResiduo: number,
- *   historial: Array<{iteracion: number, x: number[], error: number|null}>
+ *   historial: Array<{iteracion: number, x: number[], errores: (number|null)[], error: number|null}>
  * }}
  */
 function ejecutarJacobi(A, b, xInicial, tolerancia = 1e-4, maxIteraciones = 1000) {
@@ -84,10 +92,11 @@ function ejecutarJacobi(A, b, xInicial, tolerancia = 1e-4, maxIteraciones = 1000
   let xActual = [...xInicial];
   const historial = [];
 
-  // Registrar iteración inicial k = 0
+  // Registrar iteración inicial k = 0 (errores indefinidos / null)
   historial.push({
     iteracion: 0,
     x: [...xActual],
+    errores: new Array(n).fill(null),
     error: null
   });
 
@@ -104,21 +113,22 @@ function ejecutarJacobi(A, b, xInicial, tolerancia = 1e-4, maxIteraciones = 1000
       xNuevo[i] = (b[i] - suma) / A[i][i];
     }
 
-    const error = calcularErrorRelativoVectorial(xNuevo, xActual);
+    const { errores, errorMaximo } = calcularErroresRelativos(xNuevo, xActual);
 
     historial.push({
       iteracion: k,
       x: [...xNuevo],
-      error
+      errores: [...errores],
+      error: errorMaximo
     });
 
-    if (error < tolerancia) {
+    if (errorMaximo < tolerancia) {
       const { residuo, normaResiduo } = calcularResiduo(A, b, xNuevo);
       return {
         convergio: true,
         iteraciones: k,
         solucion: xNuevo,
-        errorFinal: error,
+        errorFinal: errorMaximo,
         residuo,
         normaResiduo,
         historial
@@ -148,6 +158,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     multiplicarMatrizVector,
     normaInfinito,
+    calcularErroresRelativos,
     calcularErrorRelativoVectorial,
     calcularResiduo,
     ejecutarJacobi
